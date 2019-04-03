@@ -4,6 +4,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import axios from "axios";
 import { inspect } from "util";
+import fetch from "node-fetch";
 
 const app = express();
 
@@ -18,11 +19,11 @@ const latLongURLGetter = (address, key) => {
 };
 
 const coordinatesGetter = obj => {
-  return obj.data.resourceSets[0].resources[0].point.coordinates;
+  return obj.resourceSets[0].resources[0].point.coordinates;
 };
 
 const resultsGetter = obj => {
-  return obj.data.resourceSets[0].resources[0].results[0];
+  return obj.resourceSets[0].resources[0].results[0];
 };
 app.post("/bingit", async (req, res) => {
   const addressOrigin = req.body.addressOrigin;
@@ -33,30 +34,33 @@ app.post("/bingit", async (req, res) => {
       req.body.addressOrigin,
       process.env.BING_MAPS_KEY
     );
-    const locationDataFromQuery = await axios.get(originLocationUrlForQuery);
-    console.log(coordinatesGetter(locationDataFromQuery));
-    const [originLat, originLong] = coordinatesGetter(locationDataFromQuery);
+    const locationDataFromQuery = await fetch(originLocationUrlForQuery);
+    const locationResponse = await locationDataFromQuery.json();
+    const [originLat, originLong] = coordinatesGetter(locationResponse);
 
     const origin = {
       latitude: originLat,
       longitude: originLong
     };
+    console.log("origin: ", origin);
 
     const destinationLocationUrlForQuery = latLongURLGetter(
       req.body.addressDestination,
       process.env.BING_MAPS_KEY
     );
-    const destinationLocationDataFromQuery = await axios.get(
+    const destinationLocationDataFromQuery = await fetch(
       destinationLocationUrlForQuery
     );
-    console.log(coordinatesGetter(destinationLocationDataFromQuery));
+    const destinationResponse = await destinationLocationDataFromQuery.json();
     const [destinationLat, destinationLong] = coordinatesGetter(
-      destinationLocationDataFromQuery
+      destinationResponse
     );
     const destination = {
       latitude: destinationLat,
       longitude: destinationLong
     };
+
+    console.log("destination: ", destination);
 
     const distanceMatrixUrl = `https://dev.virtualearth.net/REST/v1/Routes/DistanceMatrix?origins=${
       origin.latitude
@@ -64,10 +68,15 @@ app.post("/bingit", async (req, res) => {
       destination.longitude
     }&travelMode=driving&key=${process.env.BING_MAPS_KEY}`;
 
-    const bingData = await axios.get(distanceMatrixUrl);
-
-    console.log("bingData: ", resultsGetter(bingData));
-    res.send(inspect(bingData));
+    const bingData = await fetch(distanceMatrixUrl);
+    const bingResponse = await bingData.json();
+    console.log("bingResponse: ", resultsGetter(bingResponse));
+    const { travelDistance, travelDuration } = resultsGetter(bingResponse);
+    console.log("travelDistance: ", travelDistance);
+    console.log("travelDuration: ", travelDuration);
+    res.send(
+      `distance: ${travelDistance} miles, duration: ${travelDuration} min`
+    );
   } catch (e) {
     res.sendStatus(500);
   }
